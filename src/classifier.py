@@ -103,7 +103,8 @@ def main(args):
 
                 ## Save the embeddings
                 lbl_file = 'idn' if args.idn else ('attr' if args.attr else '')
-                np.save('embeedings_' + str(lbl_file) + '.npy', emb_array)
+                if (args.save):
+                    np.save('embeedings_' + str(lbl_file) + '.npy', emb_array)
             else:
                 emb_array = np.load(args.embeed_file)
                 # print('Embeedings loaded...')
@@ -112,8 +113,8 @@ def main(args):
             if (args.mode=='TRAIN'):
                 # Train classifier
                 print('Training classifier')
-                #model = SVC(kernel='linear', probability=True)
-                model = CalibratedClassifierCV(LinearSVC())
+                model = SVC(kernel='linear', probability=True)
+                #model = CalibratedClassifierCV(LinearSVC())
                 model.fit(emb_array, labels)
 
                 # Create a list of class names
@@ -185,9 +186,10 @@ def parse_arguments(argv):
     parser.add_argument('--nrof_train_images_per_class', type=int,
         help='Use this number of images from each class for training and the rest for testing', default=10)
 
+    parser.add_argument('--save', type=bool, help='Save embeed file?', default=False)
     parser.add_argument('--idn', type=bool, help='Run it with celebA identities?', default=False)
     parser.add_argument('--attr', type=bool, help='Run it with celebA attributes?', default=False)
-    parser.add_argument('--embeed_file', type=bool, help='Embeddings file', default='')
+    parser.add_argument('--embeed_file', type=str, help='Embeddings file', default='')
     parser.add_argument('--lbl', type=str, help='Label file', default='')
     
     return parser.parse_args(argv)

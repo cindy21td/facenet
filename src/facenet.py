@@ -88,12 +88,15 @@ def center_loss(features, label, alfa, nrof_classes):
     loss = tf.reduce_mean(tf.square(features - centers_batch))
     return loss, centers
 
-def get_image_paths_and_labels(dataset):
+def get_image_paths_and_labels(dataset, class_names=[]):
     image_paths_flat = []
     labels_flat = []
     for i in range(len(dataset)):
         image_paths_flat += dataset[i].image_paths
-        labels_flat += [i] * len(dataset[i].image_paths)
+        if len(class_names) == 0:
+            labels_flat += [i] * len(dataset[i].image_paths)
+        else:
+            labels_flat += [class_names.index(dataset[i].name.replace('_', ' '))] * len(dataset[i].image_paths)
     return image_paths_flat, labels_flat
 
 def shuffle_examples(image_paths, labels):
@@ -113,17 +116,17 @@ def read_images_from_disk(input_queue):
     file_contents = tf.read_file(input_queue[0])
     example = tf.image.decode_image(file_contents, channels=3)
     return example, label
-  
+
 def random_rotate_image(image):
     angle = np.random.uniform(low=-10.0, high=10.0)
     return misc.imrotate(image, angle, 'bicubic')
-  
-def read_and_augment_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
+
+def read_and_augment_data(image_list, label_list, image_size, batch_size, max_nrof_epochs,
         random_crop, random_flip, random_rotate, nrof_preprocess_threads, shuffle=True):
-    
+
     images = ops.convert_to_tensor(image_list, dtype=tf.string)
     labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
-    
+
     # Makes an input queue
     input_queue = tf.train.slice_input_producer([images, labels],
         num_epochs=max_nrof_epochs, shuffle=shuffle)
@@ -148,15 +151,15 @@ def read_and_augment_data(image_list, label_list, image_size, batch_size, max_nr
         images_and_labels, batch_size=batch_size,
         capacity=4 * nrof_preprocess_threads * batch_size,
         allow_smaller_final_batch=True)
-  
+
     return image_batch, label_batch
-  
+
 def _add_loss_summaries(total_loss):
     """Add summaries for losses.
-  
+
     Generates moving average for all losses and associated summaries for
     visualizing the performance of the network.
-  
+
     Args:
       total_loss: Total loss from loss().
     Returns:
@@ -166,7 +169,7 @@ def _add_loss_summaries(total_loss):
     loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
     losses = tf.get_collection('losses')
     loss_averages_op = loss_averages.apply(losses + [total_loss])
-  
+
     # Attach a scalar summmary to all individual losses and the total loss; do the
     # same for the averaged version of the losses.
     for l in losses + [total_loss]:
@@ -174,7 +177,7 @@ def _add_loss_summaries(total_loss):
         # as the original loss name.
         tf.summary.scalar(l.op.name +' (raw)', l)
         tf.summary.scalar(l.op.name, loss_averages.average(l))
-  
+
     return loss_averages_op
 
 def train(total_loss, global_step, optimizer, learning_rate, moving_average_decay, update_gradient_vars, log_histograms=True):
@@ -195,31 +198,31 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
             opt = tf.train.MomentumOptimizer(learning_rate, 0.9, use_nesterov=True)
         else:
             raise ValueError('Invalid optimization algorithm')
-    
+
         grads = opt.compute_gradients(total_loss, update_gradient_vars)
-        
+
     # Apply gradients.
     apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
-  
+
     # Add histograms for trainable variables.
     if log_histograms:
         for var in tf.trainable_variables():
             tf.summary.histogram(var.op.name, var)
-   
+
     # Add histograms for gradients.
     if log_histograms:
         for grad, var in grads:
             if grad is not None:
                 tf.summary.histogram(var.op.name + '/gradients', grad)
-  
+
     # Track the moving averages of all trainable variables.
     variable_averages = tf.train.ExponentialMovingAverage(
         moving_average_decay, global_step)
     variables_averages_op = variable_averages.apply(tf.trainable_variables())
-  
+
     with tf.control_dependencies([apply_gradient_op, variables_averages_op]):
         train_op = tf.no_op(name='train')
-  
+
     return train_op
 
 def prewhiten(x):
@@ -227,7 +230,7 @@ def prewhiten(x):
     std = np.std(x)
     std_adj = np.maximum(std, 1.0/np.sqrt(x.size))
     y = np.multiply(np.subtract(x, mean), 1/std_adj)
-    return y  
+    return y
 
 def crop(image, random_crop, image_size):
     if image.shape[1]>image_size:
@@ -240,7 +243,7 @@ def crop(image, random_crop, image_size):
             (h, v) = (0,0)
         image = image[(sz1-sz2+v):(sz1+sz2+v),(sz1-sz2+h):(sz1+sz2+h),:]
     return image
-  
+
 def flip(image, random_flip):
     if random_flip and np.random.choice([True, False]):
         image = np.fliplr(image)
@@ -251,7 +254,7 @@ def to_rgb(img):
     ret = np.empty((w, h, 3), dtype=np.uint8)
     ret[:, :, 0] = ret[:, :, 1] = ret[:, :, 2] = img
     return ret
-  
+
 def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhiten=True):
     nrof_samples = len(image_paths)
     images = np.zeros((nrof_samples, image_size, image_size, 3))
@@ -259,6 +262,8 @@ def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhi
         img = misc.imread(image_paths[i])
         if img.ndim == 2:
             img = to_rgb(img)
+        if (img.ndim == 4) or (img.shape[2] == 4):
+            img = img[:, :, :3]
         if do_prewhiten:
             img = prewhiten(img)
         img = crop(img, do_random_crop, image_size)
@@ -316,13 +321,13 @@ class ImageClass():
     def __init__(self, name, image_paths):
         self.name = name
         self.image_paths = image_paths
-  
+
     def __str__(self):
         return self.name + ', ' + str(len(self.image_paths)) + ' images'
-  
+
     def __len__(self):
         return len(self.image_paths)
-  
+
 def get_dataset(path, has_class_directories=True):
     dataset = []
     path_exp = os.path.expanduser(path)
@@ -334,7 +339,7 @@ def get_dataset(path, has_class_directories=True):
         facedir = os.path.join(path_exp, class_name)
         image_paths = get_image_paths(facedir)
         dataset.append(ImageClass(class_name, image_paths))
-  
+
     return dataset
 
 
@@ -378,16 +383,20 @@ def get_attribute_dataset(path, label_fname, has_class_directories=True):
                 dct[lbl] = []
             dct[lbl].append(os.path.join(path_exp, img_name))
 
+    from random import shuffle
+    ## Filter out the images
+    for cls, imgs in dct.items():
+        shuffle(imgs)
+        dct[cls] = imgs[:1000]
     ## Only select image with 3 < images.
     dataset = [ImageClass(class_name, image_paths) for class_name, image_paths in dct.items() if len(image_paths) > 2]
-
     return dataset
 
 def get_image_paths(facedir):
     image_paths = []
     if os.path.isdir(facedir):
         images = os.listdir(facedir)
-        image_paths = [os.path.join(facedir,img) for img in images]
+        image_paths = [os.path.join(facedir,img) for img in images if 'DS_Store' not in img]
     return image_paths
   
 def split_dataset(dataset, split_ratio, mode):
