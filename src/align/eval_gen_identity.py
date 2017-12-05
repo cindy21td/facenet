@@ -98,13 +98,16 @@ def main(args):
     ## By this point our dataset is filtered to only contain images with detected faces.
     filtered_dataset = [facenet.ImageClass(class_name, image_paths) for class_name, image_paths in filtered_dct.items()]
 
+    accuracy_aligned = 1. * nrof_successfully_aligned / nrof_images_total
+    accuracy_full = test_identity(args, dataset)
+    accuracy_filtered = test_identity(args, filtered_dataset)
+    print()
     ## Alignment accuracy
-    accuracy = 1. * nrof_successfully_aligned / nrof_images_total
-    print('Aligned accuracy: %.3f' % accuracy)
+    print('Aligned accuracy: %.3f' % accuracy_aligned)
     ## Accuracy for full dataset
-    print('Identity accuracy for full test set: %.3f' % test_identity(args, dataset))
+    print('Identity accuracy for full test set: %.3f' % accuracy_full)
     ## Accuract for filtered dataset
-    print('Identity accuracy for successful aligned images: %.3f' % test_identity(args, filtered_dataset))
+    print('Identity accuracy for successful aligned images: %.3f' % accuracy_filtered)
 
 def test_identity(args, dataset):
     with tf.Graph().as_default():
@@ -155,7 +158,6 @@ def test_identity(args, dataset):
                 print('%4d  %s: %.3f' % (i, class_names[best_class_indices[i]], best_class_probabilities[i]))
 
             accuracy = np.mean(np.equal(best_class_indices, labels))
-            print(best_class_indices, labels)
             return accuracy
 
 def parse_arguments(argv):
